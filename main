@@ -1,0 +1,187 @@
+#include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
+#include <SFML/System.hpp>
+#include <SFML/Window.hpp>
+#include <SFML/Network.hpp>
+#include <iostream>
+#include <queue>
+#include <set>
+#include <map>  
+
+using namespace std;
+
+int Distance(int x, int y, int x2, int y2) {
+    int dx = abs(x2 - x);
+    int dy = abs(y2 - y);
+    return dx * 10 + dy * 10;
+}
+
+
+int maze[20][40];
+int main() {
+    int a[] = { 1, -1, 0, 0 }, b[] = { 0, 0, 1, -1 };
+    int width = 40, height = 30, cellsize = 30;
+
+    sf::RenderWindow window(sf::VideoMode(width * cellsize, height * cellsize), "A* Pathfinding", sf::Style::Default);
+    sf::Event ev;
+
+    sf::RectangleShape prazno(sf::Vector2f(cellsize - 2, cellsize - 2)), zid(sf::Vector2f(cellsize - 2, cellsize - 2)),
+        preso(sf::Vector2f(cellsize - 2, cellsize - 2)), treba(sf::Vector2f(cellsize - 2, cellsize - 2)),
+        postavka(sf::Vector2f(cellsize - 2, cellsize - 2)), pocetak(sf::Vector2f(cellsize - 2, cellsize - 2)),
+        kraj(sf::Vector2f(cellsize - 2, cellsize - 2)), res(sf::Vector2f(cellsize - 2, cellsize - 2));
+
+    res.setFillColor(sf::Color::Magenta);
+    prazno.setFillColor(sf::Color::White);
+    zid.setFillColor(sf::Color::Black);
+    preso.setFillColor(sf::Color::Red);
+    treba.setFillColor(sf::Color::Green);
+    postavka.setFillColor(sf::Color::Magenta);
+    pocetak.setFillColor(sf::Color::Blue);
+    kraj.setFillColor(sf::Color::Yellow);
+
+    for (auto& r : { &prazno, &zid, &preso, &treba, &postavka, &pocetak, &kraj, &res }) {
+        r->setOutlineThickness(1);
+        r->setOutlineColor(sf::Color::Black);
+    }
+
+    bool gameStart = false, first = true, second = true, found = false;
+    int x = 5, y = 5, startX = 0, startY = 0, endX = -1, endY = -1;
+
+    map<pair<int, int>, pair<int, int>> sol;
+    priority_queue<tuple<int, int, int, int>, vector<tuple<int, int, int, int>>, greater<tuple<int, int, int, int>>> pq;
+    set<pair<int, int>> zi, pr, tr;
+    for (int i = 0;i < 20;i++)
+    {
+        for (int j = 0;j < 40;j++)
+        {
+            if (maze[i][j] == 1)
+                zi.insert({ i,j });
+        }
+    }
+    int matrix[40][20] = { 0 };
+    int matriy[40][20] = { 0 };
+
+    while (window.isOpen()) {
+        while (window.pollEvent(ev)) {
+            switch (ev.type) {
+            case sf::Event::Closed:
+                window.close();
+                break;
+            case sf::Event::MouseMoved:
+                if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
+                    int wx = ev.mouseMove.x / cellsize;
+                    int wy = ev.mouseMove.y / cellsize;
+                    zi.insert({ wx, wy });
+                }
+                break;
+
+            case sf::Event::KeyPressed:
+                if (ev.key.code == sf::Keyboard::W && y > 0) y--;
+                else if (ev.key.code == sf::Keyboard::S && y < height - 1) y++;
+                else if (ev.key.code == sf::Keyboard::D && x < width - 1) x++;
+                else if (ev.key.code == sf::Keyboard::A && x > 0) x--;
+                else if (ev.key.code == sf::Keyboard::T) gameStart = true;
+                break;
+            case sf::Event::KeyReleased:
+                if (ev.key.code == sf::Keyboard::Enter) {
+                    if (first) {
+                        startX = x;
+                        startY = y;
+                        pocetak.setPosition(x * cellsize, y * cellsize);
+                        for (int i = 0; i < width; i++)
+                            for (int j = 0; j < height; j++)
+                                matrix[i][j] = Distance(i, j, x, y);
+
+                        pq.push({ 0, 0, x, y });
+                        first = false;
+                    }
+                    else if (second) {
+                        endX = x;
+                        endY = y;
+                        for (int i = 0; i < width; i++)
+                            for (int j = 0; j < height; j++) {
+                                matriy[i][j] = Distance(i, j, endX, endY);
+                                matrix[i][j] += Distance(i, j, endX, endY);
+                            }
+                        kraj.setPosition(x * cellsize, y * cellsize);
+                        second = false;
+                    }
+                    else if (!gameStart) {
+                        zi.insert({ x, y });
+                    }
+                }
+                break;
+
+            }
+        }
+
+        window.clear();
+
+        for (int i = 0; i < width; i++)
+            for (int j = 0; j < height; j++) {
+                prazno.setPosition(i * cellsize, j * cellsize);
+                window.draw(prazno);
+            }
+
+        for (auto t : zi) {
+            zid.setPosition(t.first * cellsize, t.second * cellsize);
+            window.draw(zid);
+        }
+
+        if (!first) window.draw(pocetak);
+        if (!second) window.draw(kraj);
+
+        if (gameStart && !pq.empty() && !found) {
+            auto t = pq.top();
+            int val = get<0>(t);
+            int i = get<2>(t);
+            int j = get<3>(t);
+            pq.pop();
+
+            if (i == endX && j == endY) {
+                found = true;
+            }
+            else {
+                pr.insert({ i, j });
+                tr.erase({ i, j });
+
+                for (int k = 0; k < 4; k++) {
+                    int newx = i + a[k], newy = j + b[k];
+
+                    if (newx >= 0 && newx < width && newy >= 0 && newy < height &&
+                        zi.find({ newx, newy }) == zi.end() &&
+                        pr.find({ newx, newy }) == pr.end() &&
+                        tr.find({ newx, newy }) == tr.end()) {
+
+                        sol[{newx, newy}] = { i, j };
+                        tr.insert({ newx, newy });
+                        pq.push({ matriy[newx][newy], matrix[newx][newy], newx, newy });
+                    }
+                }
+            }
+        }
+        
+     
+
+        postavka.setPosition(x * cellsize, y * cellsize);
+        window.draw(postavka);
+
+        for (auto t : pr) {
+            preso.setPosition(t.first * cellsize, t.second * cellsize);
+            window.draw(preso);
+        }
+        for (auto t : tr) {
+            treba.setPosition(t.first * cellsize, t.second * cellsize);
+            window.draw(treba);
+        }
+        if (found) {
+            pair<int, int> t = { endX, endY };
+            while (sol.find(t) != sol.end() && t != make_pair(startX, startY)) {
+                res.setPosition(t.first * cellsize, t.second * cellsize);
+                window.draw(res);
+                t = sol[t];
+            }
+        }
+        window.display();
+    }
+}
